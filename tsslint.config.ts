@@ -1,11 +1,9 @@
-import { defineConfig } from '@tsslint/config';
-import { defineRules } from '@tsslint/eslint';
-import * as path from 'node:path';
+import { defineConfig, importESLintRules } from '@tsslint/config';
 
-export default defineConfig({
+export default defineConfig([{
 	rules: {
-		// oxlint's default rules, but without unicorn. See https://oxc.rs/docs/guide/usage/linter/rules.html
-		...await defineRules({
+		...await importESLintRules({
+			// oxlint's default rules, but without unicorn. See https://oxc.rs/docs/guide/usage/linter/rules.html
 			'for-direction': true,
 			'no-async-promise-executor': true,
 			'no-caller': true,
@@ -83,72 +81,28 @@ export default defineConfig({
 			'@typescript-eslint/restrict-template-expressions': true,
 			'@typescript-eslint/triple-slash-reference': true,
 			// '@typescript-eslint/unbound-method': true,
-		}),
-		// Project-specific rules
-		...await defineRules({
+
+			// Project-specific rules
 			'curly': true,
 			'eqeqeq': true,
 			'no-unused-expressions': true,
 			'require-await': true,
-			'@typescript-eslint/consistent-type-imports': [{
+			'@typescript-eslint/consistent-type-imports': [true, {
 				disallowTypeAnnotations: false,
 				fixStyle: 'inline-type-imports',
 			}],
 			'@typescript-eslint/no-unnecessary-type-assertion': true,
-			'@typescript-eslint/no-unnecessary-condition': true,
 		}),
-		'missing-dependency'({ typescript: ts, file, program, report }) {
-			const { noEmit } = program.getCompilerOptions();
-			if (noEmit) {
-				return;
-			}
-			const packageJsonPath = ts.findConfigFile(file.fileName, ts.sys.fileExists, 'package.json');
-			if (!packageJsonPath) {
-				return;
-			}
-			const packageJson = JSON.parse(ts.sys.readFile(packageJsonPath) ?? '');
-			if (packageJson.private) {
-				return;
-			}
-			const parentPackageJsonPath = ts.findConfigFile(
-				path.dirname(path.dirname(packageJsonPath)),
-				ts.sys.fileExists,
-				'package.json',
-			);
-			const parentPackageJson = !!parentPackageJsonPath && parentPackageJsonPath !== packageJsonPath
-				? JSON.parse(ts.sys.readFile(parentPackageJsonPath) ?? '')
-				: {};
-			ts.forEachChild(file, function visit(node) {
-				if (
-					ts.isImportDeclaration(node)
-					&& !node.importClause?.isTypeOnly
-					&& ts.isStringLiteral(node.moduleSpecifier)
-					&& !node.moduleSpecifier.text.startsWith('./')
-					&& !node.moduleSpecifier.text.startsWith('../')
-				) {
-					let moduleName = node.moduleSpecifier.text.split('/')[0]!;
-					if (moduleName.startsWith('@')) {
-						moduleName += '/' + node.moduleSpecifier.text.split('/')[1];
-					}
-					if (
-						(
-							packageJson.devDependencies?.[moduleName]
-							|| parentPackageJson.dependencies?.[moduleName]
-							|| parentPackageJson.devDependencies?.[moduleName]
-							|| parentPackageJson.peerDependencies?.[moduleName]
-						)
-						&& !packageJson.dependencies?.[moduleName]
-						&& !packageJson.peerDependencies?.[moduleName]
-					) {
-						report(
-							`Module '${moduleName}' should be in the dependencies.`,
-							node.getStart(file),
-							node.getEnd(),
-						);
-					}
-				}
-				ts.forEachChild(node, visit);
-			});
-		},
+		'missing-dependency': (await import('./lint/missing-dependency-rule.ts')).default,
+		'type-imports': (await import('./lint/type-imports-rule.ts')).default,
 	},
-});
+}, {
+	include: [
+		'packages/language-core/**/*.ts',
+		'packages/language-plugin-pug/**/*.ts',
+		'packages/tsc/**/*.ts',
+	],
+	rules: {
+		'typescript-services-types': (await import('./lint/typescript-services-types-rule.ts')).default,
+	},
+}]);

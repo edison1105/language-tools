@@ -299,39 +299,38 @@ export function createAddComponentToOptionEdit(
 	ast: ts.SourceFile,
 	componentName: string,
 ) {
-	const scriptRanges = tsCodegen.get(sfc)?.getScriptRanges();
-	if (!scriptRanges?.exportDefault) {
+	const componentOptions = tsCodegen.get(sfc)?.getScriptRanges()?.exportDefault?.options;
+	if (!componentOptions) {
 		return;
 	}
-	const { exportDefault } = scriptRanges;
 
 	// https://github.com/microsoft/TypeScript/issues/36174
 	const printer = ts.createPrinter();
-	if (exportDefault.componentsOption && exportDefault.componentsOptionNode) {
-		const newNode: typeof exportDefault.componentsOptionNode = {
-			...exportDefault.componentsOptionNode,
+	if (componentOptions.components) {
+		const newNode: ts.ObjectLiteralExpression = {
+			...componentOptions.components.node,
 			properties: [
-				...exportDefault.componentsOptionNode.properties,
+				...componentOptions.components.node.properties,
 				ts.factory.createShorthandPropertyAssignment(componentName),
 			] as any as ts.NodeArray<ts.ObjectLiteralElementLike>,
 		};
 		const printText = printer.printNode(ts.EmitHint.Expression, newNode, ast);
 		return {
-			range: exportDefault.componentsOption,
+			range: componentOptions.components,
 			newText: unescape(printText.replace(unicodeReg, '%u')),
 		};
 	}
 	else {
-		const newNode: typeof exportDefault.argsNode = {
-			...exportDefault.argsNode,
+		const newNode: ts.ObjectLiteralExpression = {
+			...componentOptions.args.node,
 			properties: [
-				...exportDefault.argsNode.properties,
+				...componentOptions.args.node.properties,
 				ts.factory.createShorthandPropertyAssignment(`components: { ${componentName} }`),
 			] as any as ts.NodeArray<ts.ObjectLiteralElementLike>,
 		};
 		const printText = printer.printNode(ts.EmitHint.Expression, newNode, ast);
 		return {
-			range: exportDefault.args,
+			range: componentOptions.args,
 			newText: unescape(printText.replace(unicodeReg, '%u')),
 		};
 	}
